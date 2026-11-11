@@ -1,0 +1,177 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cleaner AntiRAT</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080d17;color:#e8f0f8;font-family:Arial,sans-serif}
+header{padding:22px 30px;background:#111b2b;border-bottom:1px solid #26364c}
+h1{margin:0;color:#37e6a0;font-size:26px}
+header p{color:#8e9fb5;margin:8px 0 0}
+main{max-width:1050px;margin:35px auto;padding:0 20px}
+.card{background:#121e30;border:1px solid #26394d;border-radius:16px;padding:25px;margin-bottom:20px}
+h2{font-size:19px;margin:0 0 20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:15px}
+.metric{background:#0b1523;padding:20px;border-radius:12px}
+.metric span{color:#96a8bd;font-size:13px}
+.metric strong{display:block;margin-top:12px;font-size:22px}
+button{background:#22c986;color:#06140e;border:0;border-radius:9px;padding:13px 22px;font-size:14px;font-weight:bold;cursor:pointer}
+button:hover{background:#54e9ad}
+button:disabled{opacity:.5;cursor:not-allowed}
+.secondary{background:#26384d;color:white}
+.secondary:hover{background:#39516e}
+.actions{display:flex;gap:12px;flex-wrap:wrap}
+#message{color:#a8bbcf;margin-top:18px;white-space:pre-wrap}
+#threats{background:#08111d;padding:18px;border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:350px;overflow:auto}
+.ok{color:#39e6a3}
+.bad{color:#ff6c77}
+.muted{color:#9cacc1}
+footer{text-align:center;color:#667c96;padding:20px}
+</style>
+</head>
+<body>
+<header>
+<h1>🛡 Cleaner AntiRAT</h1>
+<p>Panel de seguridad para Windows 11</p>
+</header>
+
+<main>
+<section class="card">
+<h2>Estado de protección</h2>
+<div class="grid">
+<div class="metric">
+<span>Microsoft Defender</span>
+<strong id="antivirus">Consultando...</strong>
+</div>
+<div class="metric">
+<span>Protección en tiempo real</span>
+<strong id="realtime">Consultando...</strong>
+</div>
+<div class="metric">
+<span>Escaneo antivirus</span>
+<strong id="scanstatus">Sin iniciar</strong>
+</div>
+</div>
+<br>
+<button class="secondary" onclick="loadStatus()">Actualizar estado</button>
+</section>
+
+<section class="card">
+<h2>Centro de escaneo</h2>
+<p class="muted">Análisis real mediante Microsoft Defender.</p>
+<div class="actions">
+<button id="scanButton" onclick="startScan()">
+▶ Iniciar escaneo rápido
+</button>
+<button class="secondary" onclick="loadThreats()">
+Ver detecciones
+</button>
+</div>
+<p id="message">Esperando instrucciones.</p>
+</section>
+
+<section class="card">
+<h2>Historial de detecciones</h2>
+<div id="threats" class="muted">
+Pulsa "Ver detecciones" para consultar el historial.
+</div>
+</section>
+
+<section class="card">
+<h2>Funciones en desarrollo</h2>
+<p class="muted">
+La cuarentena propia, la inspección avanzada de procesos RAT
+y la monitorización continua todavía no están implementadas.
+La protección en tiempo real mostrada corresponde a Microsoft Defender.
+</p>
+</section>
+</main>
+
+<footer>Cleaner AntiRAT — Versión experimental</footer>
+
+<script>
+async function request(url,options={}){
+ const response=await fetch(url,{
+  ...options,
+  cache:"no-store"
+ });
+ const data=await response.json();
+ if(!response.ok||!data.ok){
+  throw new Error(data.error||"Error de comunicación");
+ }
+ return data;
+}
+
+function setText(id,value){
+ document.getElementById(id).textContent=value;
+}
+
+async function loadStatus(){
+ try{
+  const data=await request("/api/status");
+  const d=data.defender;
+  setText("antivirus",d.AntivirusEnabled?"Activo":"Inactivo");
+  setText("realtime",d.RealTimeProtectionEnabled?"Activo":"Inactivo");
+ }catch(e){
+  setText("antivirus","No disponible");
+  setText("realtime","No disponible");
+  setText("message",e.message);
+ }
+}
+
+async function startScan(){
+ const button=document.getElementById("scanButton");
+ button.disabled=true;
+ try{
+  const data=await request("/api/scan",{method:"POST"});
+  setText("scanstatus","En ejecución");
+  setText("message",data.message);
+ }catch(e){
+  setText("message","Error: "+e.message);
+ }
+ await checkScan();
+}
+
+async function checkScan(){
+ try{
+  const data=await request("/api/scan");
+  const button=document.getElementById("scanButton");
+  button.disabled=data.running;
+
+  if(data.running){
+   setText("scanstatus","En ejecución");
+  }else if(data.error){
+   setText("scanstatus","Error");
+   setText("message",data.error);
+  }else{
+   setText("scanstatus","Sin escaneo activo");
+  }
+ }catch(e){
+  setText("message",e.message);
+ }
+}
+
+async function loadThreats(){
+ const output=document.getElementById("threats");
+ output.textContent="Consultando detecciones...";
+ try{
+  const data=await request("/api/threats");
+  if(!data.threats.length){
+   output.textContent="No hay detecciones registradas.";
+   return;
+  }
+  output.textContent=JSON.stringify(data.threats,null,2);
+ }catch(e){
+  output.textContent="Error: "+e.message;
+ }
+}
+
+loadStatus();
+checkScan();
+setInterval(checkScan,3000);
+</script>
+</body>
+</html>
